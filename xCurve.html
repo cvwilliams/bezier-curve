@@ -1,0 +1,243 @@
+<html>
+  <head>
+  	<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+  </head>
+  <body id="body">
+    <canvas id='mycanvas' width='500' height='500' style="background-color: #003366;"></canvas>
+    <h3 class='mode'>Mode: </h3>
+	<h3 class='mode' id="modetext"></h3>
+    <script>
+    	function handleKeyPress(e){
+	    		if(e.keyCode == '86'){
+	    			progmode = 'v';
+	    			startEndPoint = [];
+	    			canvas.onmousedown = handleMouseDown;
+	    			if($('#modetext').text() == '')
+	    				$('#modetext').append("Draw Viewport");
+	    			else if($('#modetext').text() != "Draw Viewport")
+	    				$('#modetext').text("Draw Viewport");
+
+	    		}	
+	    		else if(e.keyCode == '67'){
+	    			progmode = 'c';
+	    			canvas.onmousedown = handleMouseDown;
+	    			if($('#modetext').text() == '')
+	    				$('#modetext').append("Draw Points");
+	    			else if($('#modetext').text() != "Draw Points")
+	    				$('#modetext').text("Draw Points");
+	    		}
+	    		else if(e.keyCode == '27'){
+	    			bezier(fourPoints[0],fourPoints[1],fourPoints[2],fourPoints[3]);
+	    		}
+	    	}
+
+    window.addEventListener("keydown",handleKeyPress,true);
+    var rectPointArray = [];
+
+    function Point(x, y){
+    	this.x = x;
+    	this.y = y;
+    }
+
+    var canvas = document.getElementById('mycanvas');
+    var progmode = '';
+	var gl = canvas.getContext("experimental-webgl", {preserveDrawingBuffer: true});
+	gl.viewport(0, 0, canvas.width, canvas.height);
+	gl.clearColor(0,0,0.0,0.0);
+	gl.clear(gl.COLOR_BUFFER_BIT);
+
+	var rectPointCount = 0;
+	var curvePointCount = 0;
+
+	//canvas.onmousedown = handleMouseDown;
+
+	var startEndPoint = new Array();
+	var fourPoints = new Array();
+	var cPoints = new Array();
+
+	function handleMouseDown(event) {
+		  var canvasX, canvasY, top = 0, left = 0, obj = canvas;
+		  while (obj && obj.tagName !== 'BODY') {
+			   top += obj.offsetTop;
+		       left += obj.offsetLeft;
+		       obj = obj.offsetParent;
+		   }
+
+		   left -= window.pageXOffset;
+		   top  -= window.pageYOffset;
+
+		   canvasX = event.clientX - left;
+		   canvasY = canvas.height - (event.clientY - top);
+
+		   var glX, glY;
+		   glX = (canvasX - (canvas.width/2))/(canvas.width/2);
+		   glY = (canvasY - (canvas.height/2))/(canvas.height/2);
+
+		   var vertices = [glX, glY];	
+		   startEndPoint.push(glX);
+		   startEndPoint.push(glY);
+		   
+		   drawPoint(vertices, gl.POINTS);
+	}
+
+
+	function drawPoint(vertices, mode){
+		
+		var vertexPosBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, vertexPosBuffer);
+		//var vertices = [canvasX, canvasY];
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+		var vs;
+		var fs;
+		if(progmode === 'v'){
+			vs = 'attribute vec2 pos;' +
+			  'void main() { gl_Position = vec4(pos, 0, 1); gl_PointSize = 1.0;}';
+			fs = 'precision mediump float;' +
+			  'void main() { gl_FragColor = vec4(1,0,0,1); }';
+			rectPointCount += 1;
+			if (rectPointCount == 2){
+				rectPointCount = 0;
+				drawRect();
+			}
+		}
+		else if(progmode === 'c'){
+			vs = 'attribute vec2 pos;' +
+			  'void main() { gl_Position = vec4(pos, 0, 1); gl_PointSize = 10.0;}';
+			fs = 'precision mediump float;' +
+			  'void main() { gl_FragColor = vec4(1,1,0,1); }';
+			fourPoints.push(new Point(vertices[0],vertices[1]));
+			curvePointCount++;
+			//if(curvePointCount == 4){
+			//	canvas.onmousedown = '';
+			//	drawBez(gl.POINTS);
+			//}
+			//curvePointCount++;
+		}
+
+		var program = createProgram(vs,fs);
+		gl.useProgram(program);
+
+		program.vertexPosAttrib = gl.getAttribLocation(program, 'pos');
+		gl.enableVertexAttribArray(program.vertexPosAttrib);
+		gl.vertexAttribPointer(program.vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
+
+		gl.drawArrays(mode, 0, vertices.length/2);
+	}
+
+
+
+	function createProgram(vstr, fstr) {
+	  var program = gl.createProgram();
+	  var vshader = createShader(vstr, gl.VERTEX_SHADER);
+	  var fshader = createShader(fstr, gl.FRAGMENT_SHADER);
+	  gl.attachShader(program, vshader);
+	  gl.attachShader(program, fshader);
+	  gl.linkProgram(program);
+	  return program;
+	}
+
+
+	function createShader(str, type) {
+	  var shader = gl.createShader(type);
+	  gl.shaderSource(shader, str);
+	  gl.compileShader(shader);
+	  return shader;
+	}
+
+
+	function drawRect()
+	{
+        var pointStartX = startEndPoint[0];
+        var pointStartY = startEndPoint[1];
+        var pointEndX = startEndPoint[2];
+        var pointEndY = startEndPoint[3];
+
+		rectPointArray.push(pointStartX);
+        rectPointArray.push(pointStartY);
+
+        rectPointArray.push(pointEndX);
+        rectPointArray.push(pointStartY);
+
+        rectPointArray.push(pointEndX);
+        rectPointArray.push(pointEndY);
+
+        rectPointArray.push(pointStartX);
+        rectPointArray.push(pointEndY);
+
+        rectPointArray.push(pointStartX);
+        rectPointArray.push(pointStartY);
+
+		drawPoint(rectPointArray, gl.LINE_STRIP);
+		canvas.onmousedown = '';
+	}
+
+	function drawBez(mode, program){
+		bezierCalcPoints(.002);
+		var curveBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, curveBuffer);
+		//var vertices = [canvasX, canvasY];
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cPoints), gl.STATIC_DRAW);
+		//vs = 'attribute vec2 pos;' +
+		//	  'void main() { gl_Position = vec4(pos, 0, 1); gl_PointSize = 10.0;}';
+		//fs = 'precision mediump float;' +
+		//	  'void main() { gl_FragColor = vec4(1,1,0,1); }';
+		//var program = createProgram(vs,fs);
+		//gl.useProgram(program);
+
+		program.vertexPosAttrib = gl.getAttribLocation(program, 'pos');
+		gl.enableVertexAttribArray(program.vertexPosAttrib);
+		gl.vertexAttribPointer(program.vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
+
+		gl.drawArrays(mode, 0, cPoints);
+	}
+
+    </script>
+
+    <button onclick="drawRect()">Draw Rectangle</button>
+    <script>
+
+    bezier = function(p0, p1, p2, p3){
+				  var cX = 3 * (p1.x - p0.x),
+				      bX = 3 * (p2.x - p1.x) - cX,
+				      aX = p3.x - p0.x - cX - bX;
+
+				  var cY = 3 * (p1.y - p0.y),
+				      bY = 3 * (p2.y - p1.y) - cY,
+				      aY = p3.y - p0.y - cY - bY;
+
+				  
+
+				  for (var i = 0; i < 1; i+=.02) {
+				  		var x = (aX * Math.pow(i, 3)) + (bX * Math.pow(i, 2)) + (cX * i) + p0.x;
+				  		var y = (aY * Math.pow(i, 3)) + (bY * Math.pow(i, 2)) + (cY * i) + p0.y;
+
+				  		if(x < Math.min(rectPointArray[0], rectPointArray[2],rectPointArray[4], rectPointArray[6]) || x > Math.max(rectPointArray[0], rectPointArray[2],rectPointArray[4], rectPointArray[6]) || y < Math.min(rectPointArray[1], rectPointArray[3], rectPointArray[5], rectPointArray[7]) || y > Math.max(rectPointArray[1], rectPointArray[3],rectPointArray[5], rectPointArray[7])){
+				  			continue;
+				  		}
+				  		else{
+				  			cPoints.push(x);
+							cPoints.push(y);
+				  		}				
+
+				  }
+
+				  var curveBuffer = gl.createBuffer();
+				  gl.bindBuffer(gl.ARRAY_BUFFER, curveBuffer);
+				  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cPoints), gl.STATIC_DRAW);
+
+				vs = 'attribute vec2 pos;' +
+					  'void main() { gl_Position = vec4(pos, 0, 1); gl_PointSize = 10.0;}';
+				fs = 'precision mediump float;' +
+					  'void main() { gl_FragColor = vec4(1,1,0,1); }';
+				var program = createProgram(vs,fs);
+				gl.useProgram(program);
+
+				program.vertexPosAttrib = gl.getAttribLocation(program, 'pos');
+				gl.enableVertexAttribArray(program.vertexPosAttrib);
+				gl.vertexAttribPointer(program.vertexPosAttrib, 2, gl.FLOAT, false, 0, 0);
+
+				gl.drawArrays(gl.LINE_STRIP, 0, cPoints.length/2);
+				}		
+    </script>
+  </body>
+</html>
